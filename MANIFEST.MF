@@ -1,0 +1,3 @@
+Manifest-Version: 1.0
+Class-Path: lib/slf4j-api.jar lib/slf4j-simple.jar lib/stanford-parser.jar lib/stanford-parser-3.6.0-javadoc.jar lib/stanford-parser-3.6.0-models.jar lib/stanford-parser-3.6.0-sources.jar
+Main-Class: feature_abstract.Read_Custom_Review
