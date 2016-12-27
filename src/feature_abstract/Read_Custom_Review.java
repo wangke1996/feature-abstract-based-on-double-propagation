@@ -2,6 +2,7 @@ package feature_abstract;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -96,16 +97,6 @@ public class Read_Custom_Review {
 			br.close();
 			isr.close();
 			fis.close();
-		}
-		catch(Exception e){
-			e.printStackTrace();
-		}
-		try{
-			FileOutputStream fs=new FileOutputStream("./All_sentences.dat");
-			ObjectOutputStream os=new ObjectOutputStream(fs);
-			os.writeObject(All_sentences);
-			os.close();
-			fs.close();
 		}
 		catch(Exception e){
 			e.printStackTrace();
@@ -478,17 +469,16 @@ public class Read_Custom_Review {
         String create_time = sdf.format(new Date());
 		//----for local machine----//
 //		int max_review_num=30;
-//		String path="E:\\Tsinghua\\毕设\\project1\\Amazon_Crawler\\smart_phone\\all.txt";
-//		String path_pos="E:\\Tsinghua\\毕设\\project1\\tools\\opinion-lexicon-English\\positive-words.txt";
-//		String path_neg="E:\\Tsinghua\\毕设\\project1\\tools\\opinion-lexicon-English\\negative-words.txt";
-//		String log_out="E:\\Tsinghua\\毕设\\project1\\Amazon_Crawler\\smart_phone\\result_"+create_time+".txt";
+//		String folder="E:/Tsinghua/毕设/project1/remote_service/";
 
 		//----for remote service----//
 		int max_review_num=30000;
-		String path="./reviews.txt";
-		String path_pos="./dict/positive-words.txt";
-		String path_neg="./dict/negative-words.txt";		        
-		String log_out="./result/result_"+create_time+".txt";
+		String folder="./";
+		
+		String path=folder+"reviews.txt";
+		String path_pos=folder+"dict/positive-words.txt";
+		String path_neg=folder+"dict/negative-words.txt";		        
+		String log_out=folder+"result/result_"+create_time+".txt";
 		if(args.length>0)
 			max_review_num=Integer.parseInt(args[0]);
 		if(args.length>1)
@@ -498,16 +488,37 @@ public class Read_Custom_Review {
 		/*HashMap<String,Integer> OPINION=*/read_opinion_lexicon(path_pos,path_neg);
 		OPINION.putAll(LEXICON);
 		long read_begin=System.currentTimeMillis();
-		File pre_read_All_sentences=new File("./All_sentences.dat");
-		if(!pre_read_All_sentences.exists())
+		
+		File pre_read_All_sentences=new File(folder+"All_sentences.dat");
+		if(!pre_read_All_sentences.exists()){
 			read_custome_review(path,max_review_num);
+			try{
+				FileOutputStream fs=new FileOutputStream(pre_read_All_sentences);
+				ObjectOutputStream os=new ObjectOutputStream(fs);
+				Iterator<Sentence> it_sent=All_sentences.iterator();
+				while(it_sent.hasNext()){
+					os.writeObject(it_sent.next());
+					os.flush();
+				}
+				os.close();
+				fs.close();
+			}
+			catch(Exception e){
+				e.printStackTrace();
+			}
+		}
 		else{
 			try{
 				FileInputStream fi=new FileInputStream(pre_read_All_sentences);
 				ObjectInputStream oi=new ObjectInputStream(fi);
-				All_sentences=(List<Sentence>) oi.readObject();
-				oi.close();
-				fi.close();
+				try{
+					while(true)
+						All_sentences.add((Sentence) oi.readObject());
+				}
+				catch(EOFException e){
+					oi.close();
+					fi.close();
+				}
 			}
 			catch(Exception e){
 				e.printStackTrace();
