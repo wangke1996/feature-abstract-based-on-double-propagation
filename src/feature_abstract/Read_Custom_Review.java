@@ -1,5 +1,5 @@
 package feature_abstract;
-
+//import java.io.*;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.EOFException;
@@ -49,7 +49,7 @@ public class Read_Custom_Review {
 	protected static HashMap<String,Opinion> OPINION=new HashMap<String,Opinion>();
 	protected static HashMap<String,Opinion> OPINION_NEW=new HashMap<String,Opinion>();
 	protected static HashMap<String,Feature> FEATURE=new HashMap<String,Feature>();
-	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");add("phone");add("iphone");add("thing");add("anything");}};
+	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");add("phone");add("iphone");add("smartphone");add("thing");add("anything");add("product");add("problem");add("deal");}};
 	protected static HashSet<String> STOP_TAG=new HashSet<String>(){{add("PRP");add("PRP$");add(null);}};
 	protected static HashSet<String> JJ=new HashSet<String>(){{add("JJ");}};//add("JJR");add("JJS");}};
 	protected static HashSet<String> NN=new HashSet<String>(){{add("NN");}};//add("NNS");}};	
@@ -400,6 +400,93 @@ public class Read_Custom_Review {
 		new_word_num.add(new_opinion_num);
 		return new_word_num;
 	}
+	public static void r11(Sentence sent){
+		
+		Iterator<TypedDependency> it=sent.dependence.iterator();
+		while(it.hasNext()){
+			TypedDependency o_dep=it.next();
+			if(STOP_TAG.contains(o_dep.dep().tag())){
+				STOP_WORD.add(o_dep.dep().value());
+				continue;
+			}
+			if(STOP_TAG.contains(o_dep.gov().tag())){
+				STOP_WORD.add(o_dep.gov().value());
+				continue;
+			}
+			if(STOP_WORD.contains(o_dep.dep().value())||STOP_WORD.contains(o_dep.gov().value()))
+				continue;
+			String reln=o_dep.reln().toString();
+			if(o_dep.dep().tag()==null||o_dep.gov().tag()==null)
+				continue;
+			if(MR.contains(reln)&&OPINION.containsKey(o_dep.dep().value())){
+					//---- O->O-DEP->T, t=T ----//
+				if(NN.contains(o_dep.gov().tag())){
+					if(!FEATURE.containsKey(o_dep.gov().value()))
+						{FEATURE.put(o_dep.gov().value(), new Feature(o_dep.gov().value()));}
+					Feature f=FEATURE.get(o_dep.gov().value());
+					f.related_opinion_words.add(o_dep.dep().value());
+					f.freq++;
+					FEATURE.put(o_dep.gov().value(), f);
+				}
+			}
+		}
+	}
+	public static void r11_and_r12(Sentence sent){
+		Iterator<TypedDependency> it=sent.dependence.iterator();
+		while(it.hasNext()){
+			TypedDependency o_dep=it.next();
+			if(STOP_TAG.contains(o_dep.dep().tag())){
+				STOP_WORD.add(o_dep.dep().value());
+				continue;
+			}
+			if(STOP_TAG.contains(o_dep.gov().tag())){
+				STOP_WORD.add(o_dep.gov().value());
+				continue;
+			}
+			if(STOP_WORD.contains(o_dep.dep().value())||STOP_WORD.contains(o_dep.gov().value()))
+				continue;
+			String reln=o_dep.reln().toString();
+			if(o_dep.dep().tag()==null||o_dep.gov().tag()==null)
+				continue;
+			if(MR.contains(reln)&&OPINION.containsKey(o_dep.dep().value())){
+					//---- O->O-DEP->T, t=T ----//
+				if(NN.contains(o_dep.gov().tag())){
+					if(!FEATURE.containsKey(o_dep.gov().value()))
+						{FEATURE.put(o_dep.gov().value(), new Feature(o_dep.gov().value()));}
+					Feature f=FEATURE.get(o_dep.gov().value());
+					f.related_opinion_words.add(o_dep.dep().value());
+					f.freq++;
+					FEATURE.put(o_dep.gov().value(), f);
+				}
+					//---- O->O->DEP->H<-T-DEP<-T, t=T ----//
+				int H_id=o_dep.gov().index()-1;
+				if(H_id<0)
+					continue;
+				Iterator<TypedDependency> iter = sent.gov_of_which.get(H_id).iterator();
+				while(iter.hasNext()){
+					TypedDependency t_dep=iter.next();
+					if(!MR.contains(t_dep.reln().toString()))
+						continue;
+					if(STOP_TAG.contains(t_dep.dep().tag())){
+						STOP_WORD.add(t_dep.dep().value());
+						continue;
+					}
+					if(STOP_WORD.contains(t_dep.dep().value()))
+						continue;
+					if(t_dep.dep().tag()==null)
+						continue;
+					if(NN.contains(t_dep.dep().tag())){
+						if(!FEATURE.containsKey(t_dep.dep().value()))
+							{FEATURE.put(t_dep.dep().value(), new Feature(t_dep.dep().value()));}
+						Feature f=FEATURE.get(t_dep.dep().value());
+						f.related_opinion_words.add(o_dep.dep().value());
+						f.freq++;
+						FEATURE.put(t_dep.dep().value(), f);
+					}
+				}
+			}
+		}
+	}
 	public static String prun1(){
 		String logout="";
 		Iterator<Sentence> it_sent=All_sentences.iterator();
@@ -463,17 +550,91 @@ public class Read_Custom_Review {
 		}
 		return logout;
 	}
+	public static void sub_feature_abstract(){
+		Iterator<Sentence> it_sent=All_sentences.iterator();
+		while(it_sent.hasNext()){
+			Sentence sent=it_sent.next();
+			Iterator<TypedDependency> it_depend=sent.dependence.iterator();
+			while(it_depend.hasNext()){
+				TypedDependency depend=it_depend.next();
+				if(STOP_WORD.contains(depend.dep().value())||STOP_WORD.contains(depend.gov().value()))
+					continue;
+				if(depend.dep().tag()==null||depend.gov().tag()==null)
+					continue;
+				//---- slave->nn->master ----//
+				if(depend.reln().toString().equals("nn")&&FEATURE.containsKey(depend.dep().value())&&FEATURE.containsKey(depend.gov().value())){
+					Feature f_master=FEATURE.get(depend.dep().value());
+					Feature f_slave=FEATURE.get(depend.gov().value());
+					if(f_master.freq<=10||f_slave.freq<=10)
+						continue;
+					f_master.slave_feature.add(f_slave.feature);
+					FEATURE.put(f_master.feature, f_master);
+					f_slave.master_feature.add(f_master.feature);
+					FEATURE.put(f_slave.feature, f_slave);
+				}
+				
+				//---- master->nmod:of->slave ----//
+				if(depend.reln().toString().equals("nmod:of")
+						&&NN.contains(depend.dep().tag())
+						&&NN.contains(depend.gov().tag())
+						&&FEATURE.containsKey(depend.dep().value())
+						&&FEATURE.containsKey(depend.gov().value())){
+					//there should be some filters, such that the frequency of slave and master cannot have a huge difference, and the frequency of the master should not be too low
+					Feature f_master=FEATURE.get(depend.dep().value());
+					Feature f_slave=FEATURE.get(depend.gov().value());
+					if(f_master.freq<=10||f_slave.freq<=10)
+						continue;
+					f_master.slave_feature.add(depend.gov().value());
+					FEATURE.put(depend.dep().value(), f_master);
+					f_slave.master_feature.add(depend.dep().value());
+					FEATURE.put(depend.gov().value(), f_slave);
+					
+					//---- master->nmod:of->slave1<-conj->slave2 ----//
+					int slave1_id=depend.gov().index();
+					if(slave1_id<0)
+						continue;
+					Iterator<TypedDependency> it_dep_slave=sent.dependence.iterator();
+					while(it_dep_slave.hasNext()){
+						TypedDependency dep_slave=it_dep_slave.next();
+						if(CONJ.contains(dep_slave.reln().toString())&&NN.contains(dep_slave.dep().tag())&&NN.contains(dep_slave.gov().tag())){
+							if(dep_slave.dep().index()==slave1_id&&FEATURE.containsKey(dep_slave.gov().value())){
+								Feature f_slave2=FEATURE.get(dep_slave.gov().value());
+								if(f_slave2.freq<=10)
+									continue;
+								f_master.slave_feature.add(dep_slave.gov().value());
+								FEATURE.put(f_master.feature, f_master);
+								f_slave2.master_feature.add(f_master.feature);
+								FEATURE.put(f_slave2.feature, f_slave2);
+								continue;
+							}
+							if(dep_slave.gov().index()==slave1_id&&FEATURE.containsKey(dep_slave.dep().value())){
+								Feature f_slave2=FEATURE.get(dep_slave.dep().value());
+								if(f_slave2.freq<=10)
+									continue;
+								f_master.slave_feature.add(dep_slave.gov().value());
+								FEATURE.put(f_master.feature, f_master);
+								f_slave2.master_feature.add(f_master.feature);
+								FEATURE.put(f_slave2.feature, f_slave2);
+								continue;								
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	public static void main(String[] args){
 		
 		SimpleDateFormat sdf =   new SimpleDateFormat( "yyyy年MM月dd日HH时mm分ss秒" );
         String create_time = sdf.format(new Date());
 		//----for local machine----//
-//		int max_review_num=30;
-//		String folder="E:/Tsinghua/毕设/project1/remote_service/";
+		int max_review_num=30;
+		String folder="E:/Tsinghua/毕设/project1/remote_service/";
 
 		//----for remote service----//
-		int max_review_num=30000;
-		String folder="./";
+//		int max_review_num=30000;
+//		String folder="./";
 		
 		String path=folder+"reviews.txt";
 		String path_pos=folder+"dict/positive-words.txt";
@@ -528,36 +689,50 @@ public class Read_Custom_Review {
 		System.out.println("----read "+All_sentences.size()+" sentences time use: "+((double)(read_end-read_begin))/1000+" s----");
 
 		long extract_begin=System.currentTimeMillis();
-		Iterator<Sentence> it_sent;
-		int new_feature=0,new_opinion=0;
-		boolean sth_new=false;
-		do{
-			sth_new=false;
-			
-			new_feature=0;new_opinion=0;
-			it_sent= All_sentences.iterator();
-			while(it_sent.hasNext()){
-				List<Integer> new_word_num=r1_and_r4(it_sent.next());
-				new_feature+=new_word_num.get(0);
-				new_opinion+=new_word_num.get(1);
-			}
-			System.out.println("r1 and r4 new feature and opinion: "+new_feature+" "+new_opinion);
-			if(new_feature>0||new_opinion>0)
-				sth_new=true;
-			
-			new_feature=0;new_opinion=0;
-			it_sent=All_sentences.iterator();
-			while(it_sent.hasNext()){
-				List<Integer> new_word_num=r3_and_r2(it_sent.next());
-				new_feature+=new_word_num.get(0);
-				new_opinion+=new_word_num.get(1);
-			}
-			System.out.println("r3 and r2 new feature and opinion: "+new_feature+" "+new_opinion);
-			if(new_feature>0||new_opinion>0)
-				sth_new=true;
-		}while(sth_new);
+		//---- double propagation with all 8 rules----//
+//		Iterator<Sentence> it_sent;
+//		int new_feature=0,new_opinion=0;
+//		boolean sth_new=false;
+//		do{
+//			sth_new=false;
+//			
+//			new_feature=0;new_opinion=0;
+//			it_sent= All_sentences.iterator();
+//			while(it_sent.hasNext()){
+//				List<Integer> new_word_num=r1_and_r4(it_sent.next());
+//				new_feature+=new_word_num.get(0);
+//				new_opinion+=new_word_num.get(1);
+//			}
+//			System.out.println("r1 and r4 new feature and opinion: "+new_feature+" "+new_opinion);
+//			if(new_feature>0||new_opinion>0)
+//				sth_new=true;
+//			
+//			new_feature=0;new_opinion=0;
+//			it_sent=All_sentences.iterator();
+//			while(it_sent.hasNext()){
+//				List<Integer> new_word_num=r3_and_r2(it_sent.next());
+//				new_feature+=new_word_num.get(0);
+//				new_opinion+=new_word_num.get(1);
+//			}
+//			System.out.println("r3 and r2 new feature and opinion: "+new_feature+" "+new_opinion);
+//			if(new_feature>0||new_opinion>0)
+//				sth_new=true;
+//		}while(sth_new);
+
+		//---- no propagation with r11 O->O_DEP->T,t=T----//
+		Iterator<Sentence> it_sent=All_sentences.iterator();
+		while(it_sent.hasNext())
+			r11(it_sent.next());
+		
+		//---- no propagation with r11&r12----//
+//		Iterator<Sentence> it_sent=All_sentences.iterator();
+//		while(it_sent.hasNext())
+//			r11_and_r12(it_sent.next());
+		
+		sub_feature_abstract();
 		long extract_end=System.currentTimeMillis();
 		System.out.println("----extract opinions and targets time use: "+((double)(extract_end-extract_begin))/1000+" s----");
+		
 		Iterator<HashMap.Entry<String,Opinion>> it_op=OPINION.entrySet().iterator();
 		while(it_op.hasNext()){
 			Entry<String,Opinion> ent=it_op.next();
@@ -597,19 +772,23 @@ public class Read_Custom_Review {
 			Iterator<HashMap.Entry<String, Feature>> iter=features.iterator();
 			while(iter.hasNext())
 				bufw.write(iter.next().getValue().display()+"\n");
-			String s_prun1=prun1();
-			bufw.write(s_prun1);
-			List<HashMap.Entry<String, Feature>> features_prun1 =
-				    new ArrayList<HashMap.Entry<String, Feature>>(FEATURE.entrySet());
-			Collections.sort(features_prun1, new Comparator<Map.Entry<String, Feature>>() { 
-				public int compare(Map.Entry<String, Feature> o1, Map.Entry<String, Feature> o2) {      
-					return (o2.getValue().freq - o1.getValue().freq); 
-					//return (o1.getKey()).toString().compareTo(o2.getKey());
-				}
-			}); 
-			iter=features_prun1.iterator();
-			while(iter.hasNext())
-				bufw.write(iter.next().getValue().display()+"\n");
+			
+			//----prun1----//
+//			String s_prun1=prun1();
+//			bufw.write(s_prun1);
+//			List<HashMap.Entry<String, Feature>> features_prun1 =
+//				    new ArrayList<HashMap.Entry<String, Feature>>(FEATURE.entrySet());
+//			Collections.sort(features_prun1, new Comparator<Map.Entry<String, Feature>>() { 
+//				public int compare(Map.Entry<String, Feature> o1, Map.Entry<String, Feature> o2) {      
+//					return (o2.getValue().freq - o1.getValue().freq); 
+//					//return (o1.getKey()).toString().compareTo(o2.getKey());
+//				}
+//			}); 
+//			iter=features_prun1.iterator();
+//			while(iter.hasNext())
+//				bufw.write(iter.next().getValue().display()+"\n");
+			
+			//----new opinion words----//
 			System.out.println("new opinion words:\n");
 			bufw.write("new opinion words:\n");
 			List<HashMap.Entry<String, Opinion>> opinions =
