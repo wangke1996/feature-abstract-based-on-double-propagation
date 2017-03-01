@@ -49,12 +49,13 @@ public class Read_Custom_Review {
 	protected static HashMap<String,Opinion> OPINION=new HashMap<String,Opinion>();
 	protected static HashMap<String,Opinion> OPINION_NEW=new HashMap<String,Opinion>();
 	protected static HashMap<String,Feature> FEATURE=new HashMap<String,Feature>();
-	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");add("phone");add("iphone");add("smartphone");add("thing");add("anything");add("product");add("problem");add("deal");}};
+	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");/*add("phone");add("iphone");add("smartphone");*/add("thing");add("anything");add("product");add("problem");add("deal");}};
 	protected static HashSet<String> STOP_TAG=new HashSet<String>(){{add("PRP");add("PRP$");add(null);}};
 	protected static HashSet<String> JJ=new HashSet<String>(){{add("JJ");}};//add("JJR");add("JJS");}};
 	protected static HashSet<String> NN=new HashSet<String>(){{add("NN");}};//add("NNS");}};	
 	protected static HashSet<String> MR=new HashSet<String>(){{add("amod");add("nusbj");}};//add("prep");add("nsubj");add("csubj");add("xsubj");add("dobj");add("iobj");}};
 	protected static HashSet<String> CONJ=new HashSet<String>();
+	protected static Feature_tree tree;
 	public static /*List<Sentence> */void read_custome_review(String path,int max_review_num)
 	{
 		//int max_review_num=300;
@@ -561,15 +562,21 @@ public class Read_Custom_Review {
 					continue;
 				if(depend.dep().tag()==null||depend.gov().tag()==null)
 					continue;
-				//---- slave->nn->master ----//
-				if(depend.reln().toString().equals("nn")&&FEATURE.containsKey(depend.dep().value())&&FEATURE.containsKey(depend.gov().value())){
+				//---- master->compound->slave ----//
+				if(depend.reln().toString().equals("compound")&&FEATURE.containsKey(depend.dep().value())&&FEATURE.containsKey(depend.gov().value())){
 					Feature f_master=FEATURE.get(depend.dep().value());
 					Feature f_slave=FEATURE.get(depend.gov().value());
 					if(f_master.freq<=10||f_slave.freq<=10)
 						continue;
-					f_master.slave_feature.add(f_slave.feature);
+					if(!f_master.slave_feature_comp.containsKey(f_slave.feature)){
+						f_master.slave_feature_comp.put(f_slave.feature, 0);
+						f_slave.master_feature_comp.put(f_master.feature, 0);
+					}
+					Integer freq_slave=f_master.slave_feature_comp.get(f_slave.feature);
+					freq_slave++;
+					f_master.slave_feature_comp.put(f_slave.feature,freq_slave);
 					FEATURE.put(f_master.feature, f_master);
-					f_slave.master_feature.add(f_master.feature);
+					f_slave.master_feature_comp.put(f_master.feature,freq_slave);
 					FEATURE.put(f_slave.feature, f_slave);
 				}
 				
@@ -584,10 +591,16 @@ public class Read_Custom_Review {
 					Feature f_slave=FEATURE.get(depend.gov().value());
 					if(f_master.freq<=10||f_slave.freq<=10)
 						continue;
-					f_master.slave_feature.add(depend.gov().value());
-					FEATURE.put(depend.dep().value(), f_master);
-					f_slave.master_feature.add(depend.dep().value());
-					FEATURE.put(depend.gov().value(), f_slave);
+					if(!f_master.slave_feature_of.containsKey(f_slave.feature)){
+						f_master.slave_feature_of.put(f_slave.feature, 0);
+						f_slave.master_feature_of.put(f_master.feature, 0);
+					}
+					Integer freq_slave=f_master.slave_feature_of.get(f_slave.feature);
+					freq_slave++;
+					f_master.slave_feature_of.put(f_slave.feature,freq_slave);
+					FEATURE.put(f_master.feature, f_master);
+					f_slave.master_feature_of.put(f_master.feature,freq_slave);
+					FEATURE.put(f_slave.feature, f_slave);
 					
 					//---- master->nmod:of->slave1<-conj->slave2 ----//
 					int slave1_id=depend.gov().index();
@@ -601,9 +614,15 @@ public class Read_Custom_Review {
 								Feature f_slave2=FEATURE.get(dep_slave.gov().value());
 								if(f_slave2.freq<=10)
 									continue;
-								f_master.slave_feature.add(dep_slave.gov().value());
+								if(!f_master.slave_feature_of.containsKey(f_slave2.feature)){
+									f_master.slave_feature_of.put(f_slave2.feature, 0);
+									f_slave2.master_feature_of.put(f_master.feature, 0);
+								}
+								Integer freq_slave2=f_master.slave_feature_of.get(f_slave2.feature);
+								freq_slave2++;
+								f_master.slave_feature_of.put(f_slave2.feature,freq_slave2);
 								FEATURE.put(f_master.feature, f_master);
-								f_slave2.master_feature.add(f_master.feature);
+								f_slave2.master_feature_of.put(f_master.feature,freq_slave2);
 								FEATURE.put(f_slave2.feature, f_slave2);
 								continue;
 							}
@@ -611,9 +630,15 @@ public class Read_Custom_Review {
 								Feature f_slave2=FEATURE.get(dep_slave.dep().value());
 								if(f_slave2.freq<=10)
 									continue;
-								f_master.slave_feature.add(dep_slave.gov().value());
+								if(!f_master.slave_feature_of.containsKey(f_slave2.feature)){
+									f_master.slave_feature_of.put(f_slave2.feature, 0);
+									f_slave2.master_feature_of.put(f_master.feature, 0);
+								}
+								Integer freq_slave2=f_master.slave_feature_of.get(f_slave2.feature);
+								freq_slave2++;
+								f_master.slave_feature_of.put(f_slave2.feature,freq_slave2);
 								FEATURE.put(f_master.feature, f_master);
-								f_slave2.master_feature.add(f_master.feature);
+								f_slave2.master_feature_of.put(f_master.feature,freq_slave2);
 								FEATURE.put(f_slave2.feature, f_slave2);
 								continue;								
 							}
@@ -622,8 +647,71 @@ public class Read_Custom_Review {
 				}
 			}
 		}
+		//----intersection of slave_comp and slave_of----//
+		Iterator<Entry<String,Feature>> it_feature=FEATURE.entrySet().iterator();
+		while(it_feature.hasNext()){
+			it_feature.next().getValue().compute_intersection();
+		}
 	}
-
+	
+	public static class Feature_tree {
+		protected Feature_tree parent;
+		protected String name;
+		protected HashSet<Feature_tree> slaves=new HashSet<Feature_tree>();
+		protected Feature node;
+		public Feature_tree(Feature root){
+			parent=null;
+			name=root.feature;
+			node=root;
+		}
+		public void get_children(){
+			Iterator<Entry<String,Integer>> it=node.slave_feature_intsec.entrySet().iterator();
+			while(it.hasNext()){
+				Entry<String,Integer> ent=it.next();
+				String slave_key=ent.getKey();
+				//----kick of slaves have low frequency----//
+				if(ent.getValue()<5||FEATURE.get(ent.getKey()).freq<20)
+					continue;
+				//----a slave can't be the parent or ancestor of itself----//
+				if(slave_key.equals(name))
+					continue;
+				boolean isancestor=false;
+				Feature_tree temp=parent;
+				while(temp!=null){
+					if(slave_key.equals(temp.name)){
+						isancestor=true;
+						break;
+					}
+					temp=temp.parent;
+				}
+				if(isancestor)
+					continue;
+				Feature_tree son=new Feature_tree(FEATURE.get(slave_key));
+				son.parent=this;
+				son.get_children();
+				slaves.add(son);
+			}
+		}
+		public String display(){
+			String s="";
+			s=s+"[root: "+name+", children:";
+			Iterator<Feature_tree> it_children=slaves.iterator();
+			while(it_children.hasNext())
+				s=s+" "+it_children.next().name+",";
+			if(!slaves.isEmpty())
+				s=s.substring(0, s.length()-1);
+			s=s+"]\n";
+			it_children=slaves.iterator();
+			while(it_children.hasNext())
+				s=s+it_children.next().display();
+			return s;
+		}
+	}
+	
+	public static void make_tree(){
+		tree=new Feature_tree(FEATURE.get("phone"));
+		tree.get_children();
+	}
 	public static void main(String[] args){
 		
 		SimpleDateFormat sdf =   new SimpleDateFormat( "yyyy年MM月dd日HH时mm分ss秒" );
@@ -730,6 +818,8 @@ public class Read_Custom_Review {
 //			r11_and_r12(it_sent.next());
 		
 		sub_feature_abstract();
+		
+		make_tree();
 		long extract_end=System.currentTimeMillis();
 		System.out.println("----extract opinions and targets time use: "+((double)(extract_end-extract_begin))/1000+" s----");
 		
@@ -772,6 +862,8 @@ public class Read_Custom_Review {
 			Iterator<HashMap.Entry<String, Feature>> iter=features.iterator();
 			while(iter.hasNext())
 				bufw.write(iter.next().getValue().display()+"\n");
+			
+			bufw.write("the tree:\n"+tree.display()+"\n");
 			
 			//----prun1----//
 //			String s_prun1=prun1();
