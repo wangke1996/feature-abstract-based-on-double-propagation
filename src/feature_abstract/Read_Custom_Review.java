@@ -650,27 +650,32 @@ public class Read_Custom_Review {
 		//----intersection of slave_comp and slave_of----//
 		Iterator<Entry<String,Feature>> it_feature=FEATURE.entrySet().iterator();
 		while(it_feature.hasNext()){
-			it_feature.next().getValue().compute_intersection();
+			Entry<String,Feature> ent=it_feature.next();
+			ent.getValue().compute_intersection();
+			ent.getValue().compute_union();
 		}
 	}
 	
 	public static class Feature_tree {
 		protected Feature_tree parent;
 		protected String name;
+		protected int level;
 		protected HashSet<Feature_tree> slaves=new HashSet<Feature_tree>();
 		protected Feature node;
 		public Feature_tree(Feature root){
 			parent=null;
 			name=root.feature;
 			node=root;
+			level=1;
 		}
 		public void get_children(){
 			Iterator<Entry<String,Integer>> it=node.slave_feature_intsec.entrySet().iterator();
+			//Iterator<Entry<String,Integer>> it=node.slave_feature_union.entrySet().iterator();
 			while(it.hasNext()){
 				Entry<String,Integer> ent=it.next();
 				String slave_key=ent.getKey();
-				//----kick of slaves have low frequency----//
-				if(ent.getValue()<5||FEATURE.get(ent.getKey()).freq<20)
+				//----kick of slaves have low frequency as well as an empty slave list----//
+				if(FEATURE.get(ent.getKey()).slave_feature_intsec.isEmpty()&&(ent.getValue()<5||FEATURE.get(ent.getKey()).freq<20))
 					continue;
 				//----a slave can't be the parent or ancestor of itself----//
 				if(slave_key.equals(name))
@@ -686,8 +691,21 @@ public class Read_Custom_Review {
 				}
 				if(isancestor)
 					continue;
+				//----a slave of M can't has a master N which is the slave of M, in other word, we only add direct child----//
+				/*boolean notdirect=false;
+				Iterator<Entry<String,Integer>> iter=FEATURE.get(ent.getKey()).master_feature_intsec.entrySet().iterator();
+				while(iter.hasNext()){
+					Entry<String,Integer> ent1=iter.next();
+					if(FEATURE.get(ent1.getKey()).master_feature_intsec.containsKey(ent.getKey())){
+						notdirect=true;
+						break;
+					}
+				}
+				if(notdirect)
+					continue;*/
 				Feature_tree son=new Feature_tree(FEATURE.get(slave_key));
 				son.parent=this;
+				son.level=level+1;
 				son.get_children();
 				slaves.add(son);
 			}
@@ -706,11 +724,53 @@ public class Read_Custom_Review {
 				s=s+it_children.next().display();
 			return s;
 		}
+		public HashSet<Feature_tree> find_children(String child_name){
+			HashSet<Feature_tree> children=new HashSet<Feature_tree>();
+			Iterator<Feature_tree> it=slaves.iterator();
+			while(it.hasNext()){
+				Feature_tree child=it.next();
+				if(child.name.equals(child_name))
+					children.add(child);
+				children.addAll(child.find_children(child_name));
+			}
+			return children;
+		}
+		public Feature_tree find_son(String child_name){
+			Iterator<Feature_tree> it=slaves.iterator();
+			while(it.hasNext()){
+				Feature_tree child=it.next();
+				if(child.name.equals(child_name))
+					return child;
+			}
+			return null;
+		}
+		public boolean equals(Feature_tree t){
+			if(!name.equals(t.name))
+				return false;
+			boolean b;
+			Iterator<Feature_tree> it=slaves.iterator();
+			if(slaves.size()!=t.slaves.size())
+				return false;
+			while(it.hasNext()){
+				Feature_tree child=it.next();
+				Feature_tree t_child=t.find_son(child.name);
+				if(t_child==null)
+					return false;
+				if(!t_child.equals(child))
+					return false;
+			}
+			return true;
+		}
 	}
 	
 	public static void make_tree(){
+		FEATURE.get("phone").master_feature_comp.clear();
+		FEATURE.get("phone").master_feature_of.clear();
+		FEATURE.get("phone").master_feature_intsec.clear();
+		FEATURE.get("phone").master_feature_union.clear();
 		tree=new Feature_tree(FEATURE.get("phone"));
 		tree.get_children();
+		//----tree prun----//
 	}
 	public static void main(String[] args){
 		

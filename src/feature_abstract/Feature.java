@@ -17,9 +17,11 @@ public class Feature {
 	protected HashMap<String,Integer> slave_feature_comp=new HashMap<String,Integer>();
 	protected HashMap<String,Integer> slave_feature_of=new HashMap<String,Integer>();
 	protected HashMap<String,Integer> slave_feature_intsec=new HashMap<String,Integer>();
+	protected HashMap<String,Integer> slave_feature_union=new HashMap<String,Integer>();
 	protected HashMap<String,Integer> master_feature_comp=new HashMap<String,Integer>();
 	protected HashMap<String,Integer> master_feature_of=new HashMap<String,Integer>();
 	protected HashMap<String,Integer> master_feature_intsec=new HashMap<String,Integer>();
+	protected HashMap<String,Integer> master_feature_union=new HashMap<String,Integer>();
 	protected Integer freq;
 	public Feature(String s){
 		feature=s;
@@ -41,6 +43,30 @@ public class Feature {
 				continue;
 			Integer freq=master_feature_of.get(ent_master_comp.getKey())+ent_master_comp.getValue();
 			master_feature_intsec.put(ent_master_comp.getKey(), freq);
+		}
+	}
+	public void compute_union(){
+		slave_feature_union.putAll(slave_feature_of);
+		Iterator<Entry<String,Integer>> it=slave_feature_comp.entrySet().iterator();
+		while(it.hasNext()){
+			Entry<String,Integer> ent_slave_comp=it.next();
+			if(!slave_feature_union.containsKey(ent_slave_comp.getKey())){
+				slave_feature_union.put(ent_slave_comp.getKey(), ent_slave_comp.getValue());
+				continue;
+			}
+			Integer freq=slave_feature_of.get(ent_slave_comp.getKey())+ent_slave_comp.getValue();
+			slave_feature_union.put(ent_slave_comp.getKey(), freq);
+		}
+		master_feature_union.putAll(master_feature_of);
+		it=master_feature_comp.entrySet().iterator();
+		while(it.hasNext()){
+			Entry<String,Integer> ent_master_comp=it.next();
+			if(!master_feature_union.containsKey(ent_master_comp.getKey())){
+				master_feature_union.put(ent_master_comp.getKey(), ent_master_comp.getValue());
+				continue;
+			}
+			Integer freq=master_feature_of.get(ent_master_comp.getKey())+ent_master_comp.getValue();
+			master_feature_union.put(ent_master_comp.getKey(), freq);
 		}
 	}
 	public String display(){
@@ -113,6 +139,24 @@ public class Feature {
 		if(!slave_feature_intsec.isEmpty())
 			s=s.substring(0,s.length()-1);
 		
+		s+="]\n\tslave features by unionset: [";
+		List<HashMap.Entry<String, Integer>> slaves_union =
+			    new ArrayList<HashMap.Entry<String, Integer>>(slave_feature_union.entrySet());
+		Collections.sort(slaves_union, new Comparator<Map.Entry<String, Integer>>() { 
+			public int compare(Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2) {      
+				return (o2.getValue() - o1.getValue()); 
+				//return (o1.getKey()).toString().compareTo(o2.getKey());
+			}
+		}); 
+		
+		iter=slaves_union.iterator();
+		while(iter.hasNext()){
+			HashMap.Entry<String,Integer> ent=iter.next();
+			s=s+ent.getKey()+"="+ent.getValue()+",";
+		}
+		if(!slave_feature_union.isEmpty())
+			s=s.substring(0,s.length()-1);
+		
 		s+="]\n\tmaster features by compund: [";
 		
 		//----sort masters----//
@@ -169,6 +213,25 @@ public class Feature {
 		}
 		if(!master_feature_intsec.isEmpty())
 			s=s.substring(0,s.length()-1);
+		
+		s+="]\n\tmaster features by unionset: [";
+		List<HashMap.Entry<String, Integer>> masters_union =
+			    new ArrayList<HashMap.Entry<String, Integer>>(master_feature_union.entrySet());
+		Collections.sort(masters_union, new Comparator<Map.Entry<String, Integer>>() { 
+			public int compare(Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2) {      
+				return (o2.getValue() - o1.getValue()); 
+				//return (o1.getKey()).toString().compareTo(o2.getKey());
+			}
+		}); 
+		
+		iter=masters_union.iterator();
+		while(iter.hasNext()){
+			HashMap.Entry<String,Integer> ent=iter.next();
+			s=s+ent.getKey()+"="+ent.getValue()+",";			
+		}
+		if(!master_feature_union.isEmpty())
+			s=s.substring(0,s.length()-1);
+		
 		s+="]";
 		System.out.println(s);
 		return s;
