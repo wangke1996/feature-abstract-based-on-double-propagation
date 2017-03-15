@@ -8,6 +8,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -23,6 +24,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Vector;
 
 import org.w3c.dom.NodeList;
 
@@ -55,6 +57,12 @@ public class Read_Custom_Review {
 	protected static HashSet<String> NN=new HashSet<String>(){{add("NN");}};//add("NNS");}};	
 	protected static HashSet<String> MR=new HashSet<String>(){{add("amod");add("nusbj");}};//add("prep");add("nsubj");add("csubj");add("xsubj");add("dobj");add("iobj");}};
 	protected static HashSet<String> CONJ=new HashSet<String>();
+	
+	protected static List<Entry<String,Feature>> Feature_sorted;
+	protected static List<Vector<Integer>> sentence_vec;
+	protected static List<Vector<Integer>> context_vec;
+	protected static List<HashSet<String>> clusters=new ArrayList<HashSet<String>>();
+	
 	protected static Feature_tree tree;
 	public static /*List<Sentence> */void read_custome_review(String path,int max_review_num)
 	{
@@ -762,7 +770,6 @@ public class Read_Custom_Review {
 			return true;
 		}
 	}
-	
 	public static void make_tree(){
 		FEATURE.get("phone").master_feature_comp.clear();
 		FEATURE.get("phone").master_feature_of.clear();
@@ -772,6 +779,140 @@ public class Read_Custom_Review {
 		tree.get_children();
 		//----tree prun----//
 	}
+	public static void sort_feature(){
+		Feature_sorted =
+			    new ArrayList<Entry<String,Feature>>(FEATURE.entrySet());
+		Collections.sort(Feature_sorted, new Comparator<Entry<String,Feature>>() { 
+			public int compare(Entry<String,Feature> o1,Entry<String,Feature> o2) {      
+				return (o2.getValue().freq - o1.getValue().freq); 
+			}
+		}); 
+	}
+	public static void get_sentence_vec(){
+		sort_feature();
+		sentence_vec=new ArrayList<Vector<Integer>>();
+		Iterator<Sentence> it=All_sentences.iterator();
+		Integer I=0;
+		while(it.hasNext()){
+			Sentence s=it.next();
+			Vector<Integer> vec=new Vector<Integer>(FEATURE.size());
+			for(int k=0;k<FEATURE.size();k++){
+				if(s.text.indexOf(Feature_sorted.get(k).getKey())!=-1)
+					I=1;
+				else
+					I=0;
+				vec.add(I);
+			}
+			sentence_vec.add(vec);			
+		}
+	}
+	public static void get_context_vec(){
+		get_sentence_vec();
+		context_vec=new ArrayList<Vector<Integer>>();
+		for(int k=0;k<Feature_sorted.size();k++){
+			Vector<Integer> vec=new Vector<Integer>(Feature_sorted.size());
+			for(int m=0;m<Feature_sorted.size();m++) vec.addElement(0);
+			Iterator<Vector<Integer>> it=sentence_vec.iterator();
+			while(it.hasNext()){
+				Vector<Integer> sent_vec=it.next();
+				if(sent_vec.get(k)==1)
+					vec=vector_add(vec,sent_vec);
+			}
+			vec.set(k,0);
+			context_vec.add(vec);
+		}
+	}
+	public static void write_input_matrix(){
+		HashMap<String,Integer> hm=new HashMap<String,Integer>();
+		Iterator<Entry<String,Feature>> iter=Feature_sorted.iterator();
+		int k=0;
+		while(iter.hasNext()){
+			hm.put(iter.next().getKey(), k);
+			k++;
+		}
+		try{
+			Iterator<Feature_tree> it=tree.slaves.iterator();
+			FileWriter fw=new FileWriter("Input_Matrix.txt");
+			BufferedWriter bufw=new BufferedWriter(fw);
+			bufw.write(tree.slaves.size()+" "+context_vec.get(0).size()+'\n');		
+			while(it.hasNext()){
+				String name=it.next().name;
+				int id=hm.get(name);
+				Vector<Integer> vec=context_vec.get(id);
+				Iterator<Integer> it_vec=vec.iterator();
+				while(it_vec.hasNext())
+					bufw.write(it_vec.next().toString()+' ');
+				bufw.write('\n');
+			}
+			bufw.close();
+			fw.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+	public static Vector<Integer> vector_add(Vector<Integer> a,Vector<Integer> b){
+		if(a.size()!=b.size()){
+			System.out.println("dimension mismatch for adder!");
+			return null;
+		}
+		Vector<Integer> vec=new Vector<Integer>(a.size());
+		for(int k=0;k<a.size();k++)
+			vec.add(a.get(k)+b.get(k));
+		return vec;
+	}
+	public static String clust_feature(){
+		String method="direct";//"graph";"agglo";"rbr";"bagglo";"br";
+		Integer clust_num=3;
+		for(int k=0;k<clust_num;k++){
+			HashSet<String> hs=new HashSet<String>();
+			clusters.add(hs);
+		}
+		
+		String command="vcluster -clmethod="+method+" Input_Matrix.txt "+clust_num.toString();
+		CommandUtil util = new CommandUtil();
+        util.executeCommand(command);
+        printList(util.getStdoutList());
+        System.out.println("--------------------");
+        printList(util.getErroroutList());
+        //HashMap<String,Integer> feature_clust=new HashMap<String,Integer>();
+        String outfile="Input_Matrix.txt.clustering."+clust_num.toString();
+        try{
+        	FileReader fr=new FileReader(outfile);
+        	BufferedReader bufr=new BufferedReader(fr);
+        	String s=null;
+        	int i=0;
+        	int clust_id;
+        	Iterator<Feature_tree> iter=tree.slaves.iterator();
+        	while((clust_id=bufr.read())!=-1){
+        		if(i%3==0){
+        			clust_id=clust_id-(int) '0';
+        			clusters.get(clust_id).add(iter.next().name);
+        			//feature_clust.put(iter.next().name, clust_id);
+        		}
+        		i++;
+        	}
+        	bufr.close();
+        	fr.close();
+        }
+        catch(Exception e){
+        	e.printStackTrace();
+        }
+        String result="";
+        for(Integer k=0;k<clust_num;k++){
+        	result=result+"clust "+k.toString()+":";
+        	Iterator<String> it=clusters.get(k).iterator();
+        	while(it.hasNext())
+        		result=result+" "+it.next();
+        	result+='\n';
+        }
+        return result;
+	}
+	public static void printList(List<String> list){
+        for (String string : list) {
+            System.out.println(string);
+        }
+    }
 	public static void main(String[] args){
 		
 		SimpleDateFormat sdf =   new SimpleDateFormat( "yyyy年MM月dd日HH时mm分ss秒" );
@@ -880,9 +1021,12 @@ public class Read_Custom_Review {
 		sub_feature_abstract();
 		
 		make_tree();
+		
+		get_context_vec();
+		
 		long extract_end=System.currentTimeMillis();
 		System.out.println("----extract opinions and targets time use: "+((double)(extract_end-extract_begin))/1000+" s----");
-		
+		write_input_matrix();
 		Iterator<HashMap.Entry<String,Opinion>> it_op=OPINION.entrySet().iterator();
 		while(it_op.hasNext()){
 			Entry<String,Opinion> ent=it_op.next();
@@ -924,7 +1068,7 @@ public class Read_Custom_Review {
 				bufw.write(iter.next().getValue().display()+"\n");
 			
 			bufw.write("the tree:\n"+tree.display()+"\n");
-			
+			bufw.write("cluster for the second floor: "+clust_feature());
 			//----prun1----//
 //			String s_prun1=prun1();
 //			bufw.write(s_prun1);
