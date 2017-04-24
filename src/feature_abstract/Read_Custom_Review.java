@@ -39,7 +39,14 @@ import edu.stanford.nlp.trees.Tree;
 import edu.stanford.nlp.trees.TypedDependency;
 
 public class Read_Custom_Review {
-	
+
+	//----for local machine----//
+	protected static int max_review_num=30;
+	protected static String folder="E:/Tsinghua/毕设/project1/remote_service/";
+
+	//----for remote service----//
+//	protected static int max_review_num=30000;
+//	protected static String folder="./";
 	protected static String parserModel = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
 	protected static LexicalizedParser lp = LexicalizedParser.loadModel(parserModel);		
 	protected static TokenizerFactory<CoreLabel> tokenizerFactory =
@@ -51,7 +58,7 @@ public class Read_Custom_Review {
 	protected static HashMap<String,Opinion> OPINION=new HashMap<String,Opinion>();
 	protected static HashMap<String,Opinion> OPINION_NEW=new HashMap<String,Opinion>();
 	protected static HashMap<String,Feature> FEATURE=new HashMap<String,Feature>();
-	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");/*add("phone");add("iphone");add("smartphone");*/add("thing");add("anything");add("product");add("problem");add("deal");}};
+	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");/*add("phone");add("iphone");add("smartphone");*/add("thing");add("anything");add("something");add("everything");add("product");add("problem");add("deal");}};
 	protected static HashSet<String> STOP_TAG=new HashSet<String>(){{add("PRP");add("PRP$");add(null);}};
 	protected static HashSet<String> JJ=new HashSet<String>(){{add("JJ");}};//add("JJR");add("JJS");}};
 	protected static HashSet<String> NN=new HashSet<String>(){{add("NN");}};//add("NNS");}};	
@@ -663,6 +670,36 @@ public class Read_Custom_Review {
 			ent.getValue().compute_union();
 		}
 	}
+	public static void prun_feature(){
+		HashSet<String> delet=new HashSet<String>();
+		Iterator<Entry<String,Feature>> it=FEATURE.entrySet().iterator();
+		while(it.hasNext()){
+			Entry<String,Feature> ent=it.next();
+			if(ent.getValue().freq<20)
+				delet.add(ent.getKey());
+		}
+		Iterator<String> iter=delet.iterator();
+		while(iter.hasNext())
+			FEATURE.remove(iter.next());
+	}
+	
+	public static void write_FEATUR(){
+		try{
+			File file=new File(folder+"ALL_FEATURE.dat");
+			FileOutputStream fs=new FileOutputStream(file);
+			ObjectOutputStream os=new ObjectOutputStream(fs);
+			Iterator<Entry<String,Feature>> it_sent=Feature_sorted.iterator();
+			while(it_sent.hasNext()){
+				os.writeObject(it_sent.next().getValue());
+				os.flush();
+			}
+			os.close();
+			fs.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+	}
 	
 	public static class Feature_tree {
 		protected Feature_tree parent;
@@ -806,20 +843,192 @@ public class Read_Custom_Review {
 			sentence_vec.add(vec);			
 		}
 	}
+	public static int get_id(String s){
+		if(FEATURE.get(s)==null)
+			return -1;
+		for(int k=0;k<Feature_sorted.size();k++){
+			if(Feature_sorted.get(k).getKey().equals(s))
+				return k;
+		}
+		return -1;
+	}
 	public static void get_context_vec(){
 		get_sentence_vec();
 		context_vec=new ArrayList<Vector<Integer>>();
-		for(int k=0;k<Feature_sorted.size();k++){
+		for(int k=1;k<Feature_sorted.size();k++){
 			Vector<Integer> vec=new Vector<Integer>(Feature_sorted.size());
 			for(int m=0;m<Feature_sorted.size();m++) vec.addElement(0);
 			Iterator<Vector<Integer>> it=sentence_vec.iterator();
 			while(it.hasNext()){
 				Vector<Integer> sent_vec=it.next();
-				if(sent_vec.get(k)==1)
+				if(sent_vec.get(k)==1){
 					vec=vector_add(vec,sent_vec);
+				}
 			}
 			vec.set(k,0);
+			vec.set(0, 0);
+			//vec.remove(0);
+			//vec.setSize(50);
 			context_vec.add(vec);
+		}
+		try{
+			FileWriter fw=new FileWriter("context_vecs.txt");
+			BufferedWriter bufw=new BufferedWriter(fw);
+			bufw.write(context_vec.size()+" "+context_vec.get(0).size()+'\n');
+			Iterator<Vector<Integer>> iter=context_vec.iterator();
+			while(iter.hasNext()){
+				Iterator<Integer> it=iter.next().iterator();
+				while(it.hasNext())
+					bufw.write(it.next().toString()+' ');
+				bufw.write('\n');
+			}
+			bufw.close();
+			fw.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+		try{
+			FileWriter fw=new FileWriter("Row_labels.txt");
+			BufferedWriter bufw=new BufferedWriter(fw);
+			for(int k=1;k<Feature_sorted.size();k++){
+				bufw.write(Feature_sorted.get(k).getKey()+'\n');
+			}
+			bufw.close();
+			fw.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+	public static void get_context_vec1(){
+		sort_feature();
+		context_vec=new ArrayList<Vector<Integer>>();
+		for(int k=1;k<Feature_sorted.size();k++){
+			Vector<Integer> vec=new Vector<Integer>(Feature_sorted.size());
+			for(int i=0;i<Feature_sorted.size();i++)
+				vec.add(0);
+			context_vec.add(vec);
+		}
+		Iterator<Sentence> it=All_sentences.iterator();
+		while(it.hasNext()){
+			Sentence s=it.next();
+			Iterator<TypedDependency> it_dep=s.dependence.iterator();
+			while(it_dep.hasNext()){
+				TypedDependency dep=it_dep.next();
+				String s1=dep.dep().value();
+				String s2=dep.gov().value();
+				int id1=get_id(s1);
+				int id2=get_id(s2);
+				if(id1<=0||id2<=0)
+					continue;
+				context_vec.get(id1-1).set(id2, context_vec.get(id1-1).get(id2)+1);
+				context_vec.get(id2-1).set(id1, context_vec.get(id2-1).get(id1)+1);
+				
+			}
+		}
+		for(int k=0;k<context_vec.size();k++){
+			context_vec.get(k).set(k+1, 0);
+		}
+		
+		try{
+			FileWriter fw=new FileWriter("context_vecs.txt");
+			BufferedWriter bufw=new BufferedWriter(fw);
+			bufw.write(context_vec.size()+" "+context_vec.get(0).size()+'\n');
+			Iterator<Vector<Integer>> iter=context_vec.iterator();
+			while(iter.hasNext()){
+				Iterator<Integer> it_vec=iter.next().iterator();
+				while(it_vec.hasNext())
+					bufw.write(it_vec.next().toString()+' ');
+				bufw.write('\n');
+			}
+			bufw.close();
+			fw.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+		try{
+			FileWriter fw=new FileWriter("Row_labels.txt");
+			BufferedWriter bufw=new BufferedWriter(fw);
+			for(int k=1;k<Feature_sorted.size();k++){
+				bufw.write(Feature_sorted.get(k).getKey()+'\n');
+			}
+			bufw.close();
+			fw.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+	}
+	public static void get_context_vec2(){
+		get_sentence_vec();
+		context_vec=new ArrayList<Vector<Integer>>();
+		for(int k=1;k<Feature_sorted.size();k++){
+			Vector<Integer> vec=new Vector<Integer>(Feature_sorted.size());
+			for(int m=0;m<Feature_sorted.size();m++) vec.addElement(0);
+			Iterator<Vector<Integer>> it=sentence_vec.iterator();
+			while(it.hasNext()){
+				Vector<Integer> sent_vec=it.next();
+				if(sent_vec.get(k)==1){
+					vec=vector_add(vec,sent_vec);
+				}
+			}
+			vec.set(k,0);
+			vec.set(0, 0);
+			//vec.remove(0);
+			//vec.setSize(50);
+			context_vec.add(vec);
+		}
+		Iterator<Sentence> it=All_sentences.iterator();
+		while(it.hasNext()){
+			Sentence s=it.next();
+			Iterator<TypedDependency> it_dep=s.dependence.iterator();
+			while(it_dep.hasNext()){
+				TypedDependency dep=it_dep.next();
+				String s1=dep.dep().value();
+				String s2=dep.gov().value();
+				int id1=get_id(s1);
+				int id2=get_id(s2);
+				if(id1<=0||id2<=0)
+					continue;
+				context_vec.get(id1-1).set(id2, context_vec.get(id1-1).get(id2)+5);
+				context_vec.get(id2-1).set(id1, context_vec.get(id2-1).get(id1)+5);
+				
+			}
+		}
+		for(int k=0;k<context_vec.size();k++){
+			context_vec.get(k).set(k+1, 0);
+		}
+
+		try{
+			FileWriter fw=new FileWriter("context_vecs.txt");
+			BufferedWriter bufw=new BufferedWriter(fw);
+			bufw.write(context_vec.size()+" "+context_vec.get(0).size()+'\n');
+			Iterator<Vector<Integer>> iter=context_vec.iterator();
+			while(iter.hasNext()){
+				Iterator<Integer> it_vec=iter.next().iterator();
+				while(it_vec.hasNext())
+					bufw.write(it_vec.next().toString()+' ');
+				bufw.write('\n');
+			}
+			bufw.close();
+			fw.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
+		}
+		try{
+			FileWriter fw=new FileWriter("Row_labels.txt");
+			BufferedWriter bufw=new BufferedWriter(fw);
+			for(int k=1;k<Feature_sorted.size();k++){
+				bufw.write(Feature_sorted.get(k).getKey()+'\n');
+			}
+			bufw.close();
+			fw.close();
+		}
+		catch(Exception e){
+			e.printStackTrace();
 		}
 	}
 	public static void write_input_matrix(){
@@ -917,13 +1126,6 @@ public class Read_Custom_Review {
 		
 		SimpleDateFormat sdf =   new SimpleDateFormat( "yyyy年MM月dd日HH时mm分ss秒" );
         String create_time = sdf.format(new Date());
-		//----for local machine----//
-		int max_review_num=30;
-		String folder="E:/Tsinghua/毕设/project1/remote_service/";
-
-		//----for remote service----//
-//		int max_review_num=30000;
-//		String folder="./";
 		
 		String path=folder+"reviews.txt";
 		String path_pos=folder+"dict/positive-words.txt";
@@ -938,6 +1140,10 @@ public class Read_Custom_Review {
 		/*HashMap<String,Integer> OPINION=*/read_opinion_lexicon(path_pos,path_neg);
 		OPINION.putAll(LEXICON);
 		long read_begin=System.currentTimeMillis();
+		
+		
+		
+		
 		
 		File pre_read_All_sentences=new File(folder+"All_sentences.dat");
 		if(!pre_read_All_sentences.exists()){
@@ -1012,7 +1218,7 @@ public class Read_Custom_Review {
 		Iterator<Sentence> it_sent=All_sentences.iterator();
 		while(it_sent.hasNext())
 			r11(it_sent.next());
-		
+		prun_feature();
 		//---- no propagation with r11&r12----//
 //		Iterator<Sentence> it_sent=All_sentences.iterator();
 //		while(it_sent.hasNext())
@@ -1023,6 +1229,8 @@ public class Read_Custom_Review {
 		make_tree();
 		
 		get_context_vec();
+		
+		write_FEATUR();
 		
 		long extract_end=System.currentTimeMillis();
 		System.out.println("----extract opinions and targets time use: "+((double)(extract_end-extract_begin))/1000+" s----");
