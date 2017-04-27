@@ -45,7 +45,7 @@ public class Read_Custom_Review {
 	protected static String folder="E:/Tsinghua/毕设/project1/remote_service/";
 
 	//----for remote service----//
-//	protected static int max_review_num=30000;
+//	protected static int max_review_num=300000;
 //	protected static String folder="./";
 	protected static String parserModel = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
 	protected static LexicalizedParser lp = LexicalizedParser.loadModel(parserModel);		
@@ -76,7 +76,7 @@ public class Read_Custom_Review {
 		//int max_review_num=300;
 		try{
 			FileInputStream fis = new FileInputStream(path);   
-			InputStreamReader isr = new InputStreamReader(fis, "UTF-8");   
+			InputStreamReader isr = new InputStreamReader(fis);   
 			BufferedReader br=new BufferedReader(isr);
 			String s=null;
 			int i=0;
@@ -683,9 +683,9 @@ public class Read_Custom_Review {
 			FEATURE.remove(iter.next());
 	}
 	
-	public static void write_FEATUR(){
+	public static void write_FEATUR(String outpath){
 		try{
-			File file=new File(folder+"ALL_FEATURE.dat");
+			File file=new File(outpath+"ALL_FEATURE.dat");
 			FileOutputStream fs=new FileOutputStream(file);
 			ObjectOutputStream os=new ObjectOutputStream(fs);
 			Iterator<Entry<String,Feature>> it_sent=Feature_sorted.iterator();
@@ -852,7 +852,7 @@ public class Read_Custom_Review {
 		}
 		return -1;
 	}
-	public static void get_context_vec(){
+	public static void get_context_vec(String outpath){
 		get_sentence_vec();
 		context_vec=new ArrayList<Vector<Integer>>();
 		for(int k=1;k<Feature_sorted.size();k++){
@@ -872,7 +872,7 @@ public class Read_Custom_Review {
 			context_vec.add(vec);
 		}
 		try{
-			FileWriter fw=new FileWriter("context_vecs.txt");
+			FileWriter fw=new FileWriter(outpath+"context_vecs.txt");
 			BufferedWriter bufw=new BufferedWriter(fw);
 			bufw.write(context_vec.size()+" "+context_vec.get(0).size()+'\n');
 			Iterator<Vector<Integer>> iter=context_vec.iterator();
@@ -889,7 +889,7 @@ public class Read_Custom_Review {
 			e.printStackTrace();
 		}
 		try{
-			FileWriter fw=new FileWriter("Row_labels.txt");
+			FileWriter fw=new FileWriter(outpath+"Row_labels.txt");
 			BufferedWriter bufw=new BufferedWriter(fw);
 			for(int k=1;k<Feature_sorted.size();k++){
 				bufw.write(Feature_sorted.get(k).getKey()+'\n');
@@ -1127,14 +1127,22 @@ public class Read_Custom_Review {
 		SimpleDateFormat sdf =   new SimpleDateFormat( "yyyy年MM月dd日HH时mm分ss秒" );
         String create_time = sdf.format(new Date());
 		
-		String path=folder+"reviews.txt";
+		String path="reviews.txt";
 		String path_pos=folder+"dict/positive-words.txt";
 		String path_neg=folder+"dict/negative-words.txt";		        
 		String log_out=folder+"result/result_"+create_time+".txt";
+		String context_out=folder;
+		String pre_data="All_sentences.dat";
+		String feature_out=folder;
 		if(args.length>0)
 			max_review_num=Integer.parseInt(args[0]);
 		if(args.length>1)
 			path=args[1];
+		if(args.length>2){
+			pre_data=args[2]+'/'+pre_data;
+			context_out=args[2]+'/';
+			feature_out=args[2]+'/';
+		}
 		   
 		
 		/*HashMap<String,Integer> OPINION=*/read_opinion_lexicon(path_pos,path_neg);
@@ -1145,7 +1153,7 @@ public class Read_Custom_Review {
 		
 		
 		
-		File pre_read_All_sentences=new File(folder+"All_sentences.dat");
+		File pre_read_All_sentences=new File(folder+pre_data);
 		if(!pre_read_All_sentences.exists()){
 			read_custome_review(path,max_review_num);
 			try{
@@ -1226,15 +1234,15 @@ public class Read_Custom_Review {
 		
 		sub_feature_abstract();
 		
-		make_tree();
+		//make_tree();
 		
-		get_context_vec();
+		get_context_vec(context_out);
 		
-		write_FEATUR();
+		write_FEATUR(feature_out);
 		
 		long extract_end=System.currentTimeMillis();
 		System.out.println("----extract opinions and targets time use: "+((double)(extract_end-extract_begin))/1000+" s----");
-		write_input_matrix();
+		//write_input_matrix();
 		Iterator<HashMap.Entry<String,Opinion>> it_op=OPINION.entrySet().iterator();
 		while(it_op.hasNext()){
 			Entry<String,Opinion> ent=it_op.next();
@@ -1275,8 +1283,8 @@ public class Read_Custom_Review {
 			while(iter.hasNext())
 				bufw.write(iter.next().getValue().display()+"\n");
 			
-			bufw.write("the tree:\n"+tree.display()+"\n");
-			bufw.write("cluster for the second floor: "+clust_feature());
+			//bufw.write("the tree:\n"+tree.display()+"\n");
+			//bufw.write("cluster for the second floor: "+clust_feature());
 			//----prun1----//
 //			String s_prun1=prun1();
 //			bufw.write(s_prun1);
