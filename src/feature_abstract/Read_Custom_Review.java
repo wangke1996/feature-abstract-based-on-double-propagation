@@ -41,31 +41,31 @@ import edu.stanford.nlp.trees.TypedDependency;
 public class Read_Custom_Review {
 
 	//----for local machine----//
-	protected static int max_review_num=30;
-	protected static String folder="E:/Tsinghua/毕设/project1/remote_service/";
+//	protected static int max_review_num=300000;
+//	protected static String folder="E:/Tsinghua/毕设/project1/remote_service/";
 
 	//----for remote service----//
-//	protected static int max_review_num=300000;
-//	protected static String folder="./";
+	protected static int max_review_num=300000;
+	protected static String folder="./";
 	protected static String parserModel = "edu/stanford/nlp/models/lexparser/englishPCFG.ser.gz";
 	protected static LexicalizedParser lp = LexicalizedParser.loadModel(parserModel);		
 	protected static TokenizerFactory<CoreLabel> tokenizerFactory =
             PTBTokenizer.factory(new CoreLabelTokenFactory(), "");	
-	
+	protected static int max_feature_num=54;
 	protected static List<Sentence>  All_sentences=new ArrayList<Sentence>();
 	
 	protected static HashMap<String,Opinion> LEXICON=new HashMap<String,Opinion>();
 	protected static HashMap<String,Opinion> OPINION=new HashMap<String,Opinion>();
 	protected static HashMap<String,Opinion> OPINION_NEW=new HashMap<String,Opinion>();
 	protected static HashMap<String,Feature> FEATURE=new HashMap<String,Feature>();
-	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");/*add("phone");add("iphone");add("smartphone");*/add("thing");add("anything");add("something");add("everything");add("product");add("problem");add("deal");}};
+	protected static HashSet<String> STOP_WORD=new HashSet<String>(){{add("i");/*add("phone");add("iphone");add("smartphone");*/add("thing");add("anything");add("something");add("everything");add("buy");add("side");add("time");add("part");add("product");add("problem");add("deal");}};
 	protected static HashSet<String> STOP_TAG=new HashSet<String>(){{add("PRP");add("PRP$");add(null);}};
 	protected static HashSet<String> JJ=new HashSet<String>(){{add("JJ");}};//add("JJR");add("JJS");}};
 	protected static HashSet<String> NN=new HashSet<String>(){{add("NN");}};//add("NNS");}};	
 	protected static HashSet<String> MR=new HashSet<String>(){{add("amod");add("nusbj");}};//add("prep");add("nsubj");add("csubj");add("xsubj");add("dobj");add("iobj");}};
 	protected static HashSet<String> CONJ=new HashSet<String>();
 	
-	protected static List<Entry<String,Feature>> Feature_sorted;
+	protected static List<Entry<String,Feature>> Feature_sorted=new ArrayList<Entry<String,Feature>>();
 	protected static List<Vector<Integer>> sentence_vec;
 	protected static List<Vector<Integer>> context_vec;
 	protected static List<HashSet<String>> clusters=new ArrayList<HashSet<String>>();
@@ -81,9 +81,9 @@ public class Read_Custom_Review {
 			String s=null;
 			int i=0;
 			while((s=br.readLine())!=null&&i<max_review_num){
-				if(s.startsWith("Text:\t")){
+				if(s.startsWith("Text:\t")){//爬取评论正文部分
 					s=s.substring(6).toLowerCase();
-					String[] sentences=s.split("\\.|!|\\?|\t");
+					String[] sentences=s.split("\\.|!|\\?|\t");//分句
 					for(String s1:sentences){
 						if(s1.length()<5)
 							continue;
@@ -108,6 +108,8 @@ public class Read_Custom_Review {
 						All_sentences.add(sentence);
 					}
 					i++;
+					if(i%500==0)
+						System.out.println("\nhave parsed "+i+" reveiws\n");
 				}
 			}
 			br.close();
@@ -671,16 +673,24 @@ public class Read_Custom_Review {
 		}
 	}
 	public static void prun_feature(){
-		HashSet<String> delet=new HashSet<String>();
-		Iterator<Entry<String,Feature>> it=FEATURE.entrySet().iterator();
+		sort_feature();
+		HashSet<String> remove=new HashSet<String>();
+		Iterator<Entry<String,Feature>> it=Feature_sorted.iterator();
+		int k=0;
 		while(it.hasNext()){
+			if(k<max_feature_num){
+				k++;
+				it.next();
+				continue;
+			}
 			Entry<String,Feature> ent=it.next();
-			if(ent.getValue().freq<20)
-				delet.add(ent.getKey());
+			remove.add(ent.getKey());
+			k++;
 		}
-		Iterator<String> iter=delet.iterator();
+		Iterator<String> iter=remove.iterator();
 		while(iter.hasNext())
 			FEATURE.remove(iter.next());
+		sort_feature();
 	}
 	
 	public static void write_FEATUR(String outpath){
@@ -817,6 +827,7 @@ public class Read_Custom_Review {
 		//----tree prun----//
 	}
 	public static void sort_feature(){
+		Feature_sorted.clear();
 		Feature_sorted =
 			    new ArrayList<Entry<String,Feature>>(FEATURE.entrySet());
 		Collections.sort(Feature_sorted, new Comparator<Entry<String,Feature>>() { 
@@ -1143,8 +1154,10 @@ public class Read_Custom_Review {
 			context_out=args[2]+'/';
 			feature_out=args[2]+'/';
 		}
+		if(args.length>3)
+			max_feature_num=Integer.parseInt(args[3]);
 		   
-		
+		//----读取情感词典----//
 		/*HashMap<String,Integer> OPINION=*/read_opinion_lexicon(path_pos,path_neg);
 		OPINION.putAll(LEXICON);
 		long read_begin=System.currentTimeMillis();
@@ -1155,6 +1168,7 @@ public class Read_Custom_Review {
 		
 		File pre_read_All_sentences=new File(folder+pre_data);
 		if(!pre_read_All_sentences.exists()){
+			//----读取评论数据并进行句法分析，转为文件存储----//
 			read_custome_review(path,max_review_num);
 			try{
 				FileOutputStream fs=new FileOutputStream(pre_read_All_sentences);
@@ -1172,6 +1186,7 @@ public class Read_Custom_Review {
 			}
 		}
 		else{
+			//----读取已经过句法分析的评论语句----//
 			try{
 				FileInputStream fi=new FileInputStream(pre_read_All_sentences);
 				ObjectInputStream oi=new ObjectInputStream(fi);
@@ -1221,28 +1236,29 @@ public class Read_Custom_Review {
 //			if(new_feature>0||new_opinion>0)
 //				sth_new=true;
 //		}while(sth_new);
-
+		//----属性抽取，基于double propagation文章，但只应用部分规则----//
 		//---- no propagation with r11 O->O_DEP->T,t=T----//
 		Iterator<Sentence> it_sent=All_sentences.iterator();
 		while(it_sent.hasNext())
 			r11(it_sent.next());
-		prun_feature();
+		prun_feature();//保留高频属性
 		//---- no propagation with r11&r12----//
 //		Iterator<Sentence> it_sent=All_sentences.iterator();
 //		while(it_sent.hasNext())
 //			r11_and_r12(it_sent.next());
-		
+		//----依据规则抽取从属关系，即抽取各个属性的主、从属性----//
 		sub_feature_abstract();
 		
 		//make_tree();
-		
+		//----计算语境向量----//
 		get_context_vec(context_out);
-		
+		//----将属性写入文件，方便后续处理----//
 		write_FEATUR(feature_out);
 		
 		long extract_end=System.currentTimeMillis();
 		System.out.println("----extract opinions and targets time use: "+((double)(extract_end-extract_begin))/1000+" s----");
 		//write_input_matrix();
+		//----写入double propagation抽取的新情感词----//
 		Iterator<HashMap.Entry<String,Opinion>> it_op=OPINION.entrySet().iterator();
 		while(it_op.hasNext()){
 			Entry<String,Opinion> ent=it_op.next();
@@ -1266,6 +1282,7 @@ public class Read_Custom_Review {
 		/*Iterator<Entry<String,Integer>> it=FEATURE.entrySet().iterator();
 		while(it.hasNext())
 			System.out.println(it.next());*/
+		//----输出结果----//
 		//---- Feature sort by frequency ----//
 		try{
 			FileWriter log_write=new FileWriter(log_out);
